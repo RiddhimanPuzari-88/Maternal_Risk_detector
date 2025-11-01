@@ -1,181 +1,131 @@
-# ---------------------------------------------------------------
-# 1. SETUP: IMPORT LIBRARIES & UPLOAD DATA
-# ---------------------------------------------------------------
+import streamlit as st
 import pandas as pd
-import numpy as np
-import io
-from google.colab import files # For uploading files in Colab
-from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.model_selection import train_test_split
+import numpy as np
 import warnings
 
-# Suppress warnings for a cleaner output
+# Suppress warnings
 warnings.filterwarnings('ignore')
 
-print("--- Step 1: Setup Complete ---")
-print("Please upload your 'Dataset - Updated.csv' file.")
+# --- 1. Model Training (Cached) ---
+# We use @st.cache_data to load and train the model only once.
+@st.cache_data
+def load_and_train_model(dataset_path):
+    """
+    Loads the dataset, preprocesses it, and trains a
+    Random Forest Classifier.
+    """
+    # Load the dataset
+    try:
+        df = pd.read_csv(dataset_path)
+    except FileNotFoundError:
+        # This will show a nice error in the Streamlit app if the file is missing
+        st.error(f"Error: '{dataset_path}' not found.")
+        st.error("Please make sure 'Dataset - Updated.csv' is in the same folder as 'app.py'.")
+        st.stop() # Stop the app
+    
+    # --- Data Cleaning (from our Colab notebook) ---
+    df.columns = df.columns.str.lower().str.replace(' ', '_')
 
-# This command will open a file upload dialog
-uploaded = files.upload()
-
-# Get the filename (should be 'Dataset - Updated.csv')
-filename = list(uploaded.keys())[0]
-
-print(f"\nSuccessfully uploaded: {filename}")
-
-
-# ---------------------------------------------------------------
-# 2. LOAD & PREPROCESS THE DATA (WITH FIX)
-# ---------------------------------------------------------------
-print("\n--- Step 2: Loading and Preprocessing Data ---")
-
-df = pd.read_csv(io.BytesIO(uploaded[filename]))
-
-# A. Clean column names
-df.columns = df.columns.str.lower().str.replace(' ', '_')
-print("Cleaned column names.")
-
-# B. Handle missing values in features (X)
-if 'bmi' in df.columns:
-    missing_bmi_count = df['bmi'].isnull().sum()
-    if missing_bmi_count > 0:
-        print(f"\nFound {missing_bmi_count} missing BMI values.")
+    # Fill missing BMI
+    if 'bmi' in df.columns and df['bmi'].isnull().sum() > 0:
         median_bmi = df['bmi'].median()
         df['bmi'].fillna(median_bmi, inplace=True)
-        print(f"Filled missing BMI values with median: {median_bmi}")
-else:
-    print("\n'bmi' column not found, skipping missing value fill.")
     
-# C. Handle target variable (y)
-# Map text labels to numbers
-df['risk_level'] = df['risk_level'].map({'High': 1, 'Low': 0})
-
-# Check for and drop any rows with unmapped/missing 'risk_level'
-nan_in_target = df['risk_level'].isnull().sum()
-if nan_in_target > 0:
-    print(f"\nFound {nan_in_target} rows with missing 'risk_level'. Dropping them.")
+    # Map and clean target variable 'risk_level'
+    df['risk_level'] = df['risk_level'].map({'High': 1, 'Low': 0})
+    
+    # Drop any rows that couldn't be mapped (e.g., 'Medium' or NaN)
     df.dropna(subset=['risk_level'], inplace=True)
-else:
-    print("\nNo missing 'risk_level' values found after mapping.")
+    
+    df['risk_level'] = df['risk_level'].astype(int)
 
-# Convert target to integer type
-df['risk_level'] = df['risk_level'].astype(int)
+    # --- Define Features (X) and Target (y) ---
+    y = df['risk_level']
+    X = df.drop('risk_level', axis=1)
+    
+    # Save feature names for later use (very important!)
+    feature_names = X.columns.tolist()
+    
+    # --- Train the Model ---
+    # We train on ALL available data for the final app
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X, y)
+    
+    print("Model trained successfully.")
+    
+    return model, feature_names
 
-print("\nData preprocessing complete.")
-
-
-# ---------------------------------------------------------------
-# 3. DEFINE FEATURES (X) AND TARGET (y)
-# ---------------------------------------------------------------
-print("\n--- Step 3: Defining Features and Target ---")
-
-y = df['risk_level']
-X = df.drop('risk_level', axis=1)
-
-# Save the feature names for later, it's very important!
-feature_names = X.columns.tolist()
-
-print(f"Target (y): 'risk_level'")
-print(f"Features (X): {feature_names}")
-
-
-# ---------------------------------------------------------------
-# 4. SPLIT DATA AND TRAIN THE MODEL
-# ---------------------------------------------------------------
-print("\n--- Step 4: Splitting Data and Training Model ---")
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-print(f"Training set size: {X_train.shape[0]} samples")
-print(f"Testing set size:  {X_test.shape[0]} samples")
-
-model = RandomForestClassifier(n_estimators=100, random_state=42)
-model.fit(X_train, y_train)
-
-print("\nModel training complete!")
+# --- 2. Load the Trained Model ---
+# This line tells the function where to find your data file
+model, feature_names = load_and_train_model('Dataset - Updated.csv')
 
 
-# ---------------------------------------------------------------
-# 5. EVALUATE THE MODEL (ON TEST DATA)
-# ---------------------------------------------------------------
-print("\n--- Step 5: Evaluating Model Performance ---")
+# --- 3. Streamlit App Interface ---
+st.set_page_config(page_title="Maternal Risk Assessor", layout="wide")
+st.title("👩‍⚕️ Maternal Health Risk Assessment Tool")
+st.write("""
+This tool uses a Machine Learning model to predict whether a pregnancy
+is **High-Risk** or **Low-Risk** based on clinical health indicators.
+Please enter the patient's data in the sidebar.
+""")
 
-y_pred = model.predict(X_test)
-accuracy = accuracy_score(y_test, y_pred)
-print(f"Overall Accuracy: {accuracy * 100:.2f}%")
-print("\nClassification Report:")
-print(classification_report(y_test, y_pred, target_names=['Low (0)', 'High (1)']))
+# --- 4. Input Sidebar ---
+st.sidebar.header("Enter Patient Data")
 
-
-# ---------------------------------------------------------------
-# 6. (NEW) PREDICT ON YOUR OWN INPUT
-# ---------------------------------------------------------------
-print("\n--- Step 6: Practical Use Case - Predict on Your Input ---")
-
-# Helper function to get a valid number from the user
-def get_numeric_input(prompt):
-    while True:
-        try:
-            value_str = input(prompt)
-            return float(value_str)
-        except ValueError:
-            print("Invalid input. Please enter a number (e.g., 22.5 or 140).")
-
-# Helper function to get a valid binary (0 or 1) from the user
-def get_binary_input(prompt):
-    while True:
-        try:
-            value_str = input(prompt).lower().strip()
-            if value_str in ['1', 'yes', 'y']:
-                return 1.0
-            elif value_str in ['0', 'no', 'n']:
-                return 0.0
-            else:
-                # Try to convert to number just in case
-                num = float(value_str)
-                if num == 1.0:
-                    return 1.0
-                elif num == 0.0:
-                    return 0.0
-            print("Invalid input. Please enter 1 (Yes) or 0 (No).")
-        except ValueError:
-            print("Invalid input. Please enter 1 (Yes) or 0 (No).")
-
-# --- Collect Data from You ---
-print("\n--- Please Enter Patient Data ---")
-print("Enter a number for each prompt. For Yes/No questions, enter 1 or 0.")
-
+# Create a dictionary to hold the user's input
 patient_input = {}
-patient_input['age'] = get_numeric_input("1. Age (e.g., 32): ")
-patient_input['systolic_bp'] = get_numeric_input("2. Systolic BP (Upper, e.g., 145): ")
-patient_input['diastolic'] = get_numeric_input("3. Diastolic BP (Lower, e.g., 95): ")
-patient_input['bs'] = get_numeric_input("4. Blood Sugar (BS) (e.g., 7.2 or 11.0): ")
-patient_input['body_temp'] = get_numeric_input("5. Body Temp (e.g., 98): ")
-patient_input['bmi'] = get_numeric_input("6. BMI (e.g., 22.5 or 32.0): ")
-patient_input['previous_complications'] = get_binary_input("7. Previous Complications? (1=Yes, 0=No): ")
-patient_input['preexisting_diabetes'] = get_binary_input("8. Preexisting Diabetes? (1=Yes, 0=No): ")
-patient_input['gestational_diabetes'] = get_binary_input("9. Gestational Diabetes? (1=Yes, 0=No): ")
-patient_input['mental_health'] = get_binary_input("10. Mental Health Issues? (1=Yes, 0=No): ")
-patient_input['heart_rate'] = get_numeric_input("11. Heart Rate (e.g., 88): ")
 
-# --- Format the data for the model ---
-# Convert your dictionary into a DataFrame
-# We use `feature_names` to ensure the columns are in the
-# *exact* order the model was trained on.
-patient_df = pd.DataFrame([patient_input], columns=feature_names)
+# Create input fields for each feature
+patient_input['age'] = st.sidebar.slider("1. Age", 15, 60, 30)
 
-print("\nInput data for this patient:")
-print(patient_df.to_markdown(index=False)) # Prints a clean table
+st.sidebar.subheader("Vitals")
+patient_input['systolic_bp'] = st.sidebar.slider("2. Systolic BP (Upper)", 80, 180, 120)
+patient_input['diastolic'] = st.sidebar.slider("3. Diastolic BP (Lower)", 50, 120, 80)
+patient_input['bs'] = st.sidebar.number_input("4. Blood Sugar (BS) (mg/dL-like)", min_value=5.0, max_value=20.0, value=7.2, step=0.1)
+patient_input['body_temp'] = st.sidebar.slider("5. Body Temp (F)", 95.0, 105.0, 98.6, step=0.1)
+patient_input['heart_rate'] = st.sidebar.slider("6. Heart Rate (bpm)", 60, 100, 75)
 
-# --- Make the predictions ---
-new_prediction = model.predict(patient_df)
-new_probability = model.predict_proba(patient_df)
+st.sidebar.subheader("Metrics & History")
+patient_input['bmi'] = st.sidebar.number_input("7. BMI", min_value=15.0, max_value=50.0, value=22.5, step=0.1)
+patient_input['previous_complications'] = st.sidebar.selectbox("8. Previous Complications?", (0, 1), format_func=lambda x: 'Yes' if x == 1 else 'No')
+patient_input['preexisting_diabetes'] = st.sidebar.selectbox("9. Preexisting Diabetes?", (0, 1), format_func=lambda x: 'Yes' if x == 1 else 'No')
+patient_input['gestational_diabetes'] = st.sidebar.selectbox("10. Gestational Diabetes?", (0, 1), format_func=lambda x: 'Yes' if x == 1 else 'No')
+patient_input['mental_health'] = st.sidebar.selectbox("11. Mental Health Issues?", (0, 1), format_func=lambda x: 'Yes' if x == 1 else 'No')
 
-# --- Show the final results in a friendly way ---
-labels = {1: 'High-Risk', 0: 'Low-Risk'}
-pred_label = labels[new_prediction[0]]
-pred_prob = new_probability[0][new_prediction[0]] * 100
 
-print("\n--- PREDICTION RESULT ---")
-print(f"\nPrediction: {pred_label}")
-print(f"Confidence: {pred_prob:.2f}%")
+# --- 5. Prediction Logic ---
+
+# Create a button to trigger the prediction
+if st.sidebar.button("Assess Risk", use_container_width=True):
+    # 1. Convert the input dictionary to a DataFrame
+    patient_df = pd.DataFrame([patient_input], columns=feature_names)
+
+    # 2. Make predictions
+    prediction = model.predict(patient_df)
+    probability = model.predict_proba(patient_df)
+
+    # 3. Get the result
+    pred_label = "High-Risk" if prediction[0] == 1 else "Low-Risk"
+    pred_prob = probability[0][prediction[0]] * 100
+
+    # 4. Display the result
+    st.subheader("--- Assessment Result ---")
+    
+    if pred_label == "High-Risk":
+        st.error(f"**Prediction: {pred_label}**")
+    else:
+        st.success(f"**Prediction: {pred_label}**")
+    
+    st.write(f"**Confidence:** {pred_prob:.2f}%")
+    
+    st.write("--- Model Confidence Breakdown ---")
+    prob_low = probability[0][0] * 100
+    prob_high = probability[0][1] * 100
+    st.write(f"Probability of Low-Risk: {prob_low:.2f}%")
+    st.write(f"Probability of High-Risk: {prob_high:.2f}%")
+
+    # Display the input data that was used
+    st.subheader("Input Data Used for this Assessment:")
+    st.dataframe(patient_df)
