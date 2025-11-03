@@ -183,25 +183,24 @@ if submit_button:
         explainer = shap.TreeExplainer(model)
         
         # --- THIS IS THE FIX ---
-        # For a binary classifier, TreeExplainer returns one array of shap_values
-        # (for class 1) with shape (n_samples, n_features)
+        # For a binary classifier, TreeExplainer returns a LIST of two arrays:
+        # [shap_values_for_class_0, shap_values_for_class_1]
         
-        # 1. Get SHAP values for ALL samples (in this case, just one)
-        shap_values_array = explainer.shap_values(patient_df) # Shape (1, 11)
+        # 1. Get the list of SHAP values
+        shap_values_list = explainer.shap_values(patient_df)
         
-        # 2. Get the values for our single patient (the first row)
-        shap_values_this_patient = shap_values_array[0] # Shape (11,)
+        # 2. Get the values for our single patient for CLASS 1 (High-Risk)
+        shap_values_this_patient = shap_values_list[1][0] # [1] for class 1, [0] for the first patient
         
-        # 3. Get the model's base value (this is a single float)
-        #    This is the average "High-Risk" probability over the whole dataset
-        expected_value = explainer.expected_value
+        # 3. Get the model's base value for CLASS 1 (High-Risk)
+        expected_value = explainer.expected_value[1]
         
         # --- END OF FIX ---
 
         # Create the force plot
         fig, ax = plt.subplots(figsize=(10, 3))
         shap.force_plot(
-            expected_value,              # The base value
+            expected_value,              # The base value for High-Risk
             shap_values_this_patient,    # The SHAP values for this patient
             patient_df,                  # The patient's data
             matplotlib=True,
