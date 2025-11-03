@@ -9,7 +9,7 @@ import warnings
 # Suppress warnings
 warnings.filterwarnings('ignore')
 
-# --- 1. Language Translation Dictionary (Your latest version) ---
+# --- 1. Language Translation Dictionary (UPDATED) ---
 LANGUAGES = {
     "English": {
         "title": "Pregnency Health Risk Assessment",
@@ -42,8 +42,10 @@ LANGUAGES = {
         "confidence": "Sureness",
         "advice_high": "What to do: Please see a doctor soon for extra check-ups.",
         "advice_low": "What to do: Continue with your normal check-ups.",
-        "breakdown_header": "--- Why the model decided this (SHAP Plot) ---",
-        "xai_explainer": "Red arrows push risk HIGHER (towards High-Risk). Blue arrows push risk LOWER.",
+        # NEW TEXT
+        "breakdown_header": "--- Main Risk Factors ---",
+        "xai_explainer": "These are the factors the model saw as contributing to a higher risk:",
+        "xai_none": "The model did not find any significant risk factors.",
         "data_header": "The Data You Entered:"
     },
     "Assamese": {
@@ -77,8 +79,10 @@ LANGUAGES = {
         "confidence": "নিশ্চয়তা",
         "advice_high": "কি কৰিব: অনুগ্ৰহ কৰি সোনকালে অতিৰিক্ত পৰীক্ষাৰ বাবে এজন চিকিৎসকক দেখুৱাওক।",
         "advice_low": "কি কৰিব: আপোনাৰ সাধাৰণ পৰীক্ষা অব্যাহত ৰাখক।",
-        "breakdown_header": "--- মডেলটোৱে কিয় এই সিদ্ধান্ত ল'লে (SHAP Plot) ---",
-        "xai_explainer": "ৰঙা কাড়বোৰে আশংকাক ওপৰলৈ (High-Risk) ঠেলে। নীলা কাড়বোৰে আশংকাক তললৈ ঠেলে।",
+        # NEW TEXT
+        "breakdown_header": "--- মূল আশংকাৰ কাৰকসমূহ ---",
+        "xai_explainer": "মডেলটোৱে এই কাৰকসমূহক উচ্চ আশংকাৰ বাবে দায়ী বুলি চিনাক্ত কৰিছে:",
+        "xai_none": "মডেলটোৱে কোনো গুৰুত্বপূৰ্ণ আশংকাৰ কাৰক বিচাৰি পোৱা নাই।",
         "data_header": "আপুনি দিয়া তথ্য:"
     }
 }
@@ -175,33 +179,46 @@ if submit_button:
         st.success(f"**{lang[pred_label_key]}** ({lang['confidence']}: {pred_prob:.2f}%)")
         st.info(lang["advice_low"])
     
-    # --- 4. SHAP EXPLAINABLE AI (XAI) PLOT ---
+    # --- 4. SHAP EXPLAINABLE AI (LIST) ---
     st.subheader(lang["breakdown_header"])
-    st.write(lang["xai_explainer"])
     
     try:
-        # 1. Use the explainer (which we already loaded)
+        # 1. Use the explainer on the patient's data
         shap_explanation = explainer(patient_df)
 
-        # 2. We want the explanation for CLASS 1 (High-Risk)
+        # 2. Get the explanation for CLASS 1 (High-Risk)
         explanation_for_class_1 = shap_explanation[0, :, 1]
         
-        # 3. Create the force plot
-        fig, ax = plt.subplots(figsize=(10, 3))
-        shap.plots.force(
-            explanation_for_class_1,
-            matplotlib=True,
-            show=False,
-            text_rotation=0
-        )
-        plt.tight_layout()
-        st.pyplot(fig, use_container_width=True)
+        # 3. Get the raw SHAP values (the numbers)
+        shap_values_for_class_1 = explanation_for_class_1.values
         
-        # --- THIS LINE WAS REMOVED ---
-        # st.set_option('deprecation.showPyplotGlobalUse', False) 
-    
+        # 4. Get the feature names
+        feature_names_for_plot = explanation_for_class_1.feature_names
+        
+        # 5. Create a list of (feature_name, shap_value) tuples
+        feature_shap_list = list(zip(feature_names_for_plot, shap_values_for_class_1))
+        
+        # 6. Find all features that are "abnormal" (pushing risk UP)
+        #    A positive SHAP value means it contributes to "High-Risk"
+        risk_factors = [
+            (name, val) for name, val in feature_shap_list if val > 0.01
+        ]
+        
+        # 7. Sort the factors from most important to least
+        risk_factors.sort(key=lambda x: x[1], reverse=True)
+        
+        # 8. Display the list
+        if risk_factors:
+            st.write(lang["xai_explainer"])
+            for factor_name, factor_value in risk_factors:
+                # Find the translated, "friendly" name
+                friendly_name = f"{factor_name.replace('_', ' ').title()}"
+                st.markdown(f"- **{friendly_name}**")
+        else:
+            st.write(lang["xai_none"])
+
     except Exception as e:
-        st.error(f"Could not generate SHAP plot: {e}")
+        st.error(f"Could not generate risk factor list: {e}")
 
     
     # 5. Display input data
