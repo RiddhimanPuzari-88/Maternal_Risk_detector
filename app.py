@@ -46,19 +46,19 @@ LANGUAGES = {
         "breakdown_header": "--- Main Risk Factors ---",
         "xai_explainer": "The model suggests these factors are contributing to a higher risk:",
         "xai_none": "The model did not find any significant factors contributing to high risk.",
-        "xai_is_factor": "is a factor contributing to risk.", # Sentence end
+        # "xai_is_factor": "is a factor...",  # REMOVED
         "factor_names": {
-            "age": "Your Age",
-            "systolic_bp": "Your Upper Blood Pressure",
-            "diastolic": "Your Lower Blood Pressure",
-            "bs": "Your Blood Sugar",
-            "body_temp": "Your Body Temperature",
-            "bmi": "Your BMI (Body Mass Index)",
-            "previous_complications": "Your history of Previous Complications",
-            "preexisting_diabetes": "Your history of Preexisting Diabetes",
-            "gestational_diabetes": "Your Gestational Diabetes status",
-            "mental_health": "Your Mental Health status",
-            "heart_rate": "Your Heart Rate"
+            "age": "Age",
+            "systolic_bp": "Upper Blood Pressure",
+            "diastolic": "Lower Blood Pressure",
+            "bs": "Blood Sugar",
+            "body_temp": "Body Temperature",
+            "bmi": "BMI (Body Mass Index)",
+            "previous_complications": "Previous Complications",
+            "preexisting_diabetes": "Preexisting Diabetes",
+            "gestational_diabetes": "Gestational Diabetes",
+            "mental_health": "Mental Health",
+            "heart_rate": "Heart Rate"
         },
         "data_header": "The Data You Entered:"
     },
@@ -97,19 +97,19 @@ LANGUAGES = {
         "breakdown_header": "--- মূল আশংকাৰ কাৰকসমূহ ---",
         "xai_explainer": "মডেলটোৱে এই কাৰকসমূহক উচ্চ আশংকাৰ বাবে দায়ী বুলি চিনাক্ত কৰিছে:",
         "xai_none": "মডেলটোৱে কোনো গুৰুত্বপূৰ্ণ আশংকাৰ কাৰক বিচাৰি পোৱা নাই।",
-        "xai_is_factor": "আশংকা বৃদ্ধি কৰা এটা কাৰক।", # Sentence end
+        # "xai_is_factor": "...", # REMOVED
         "factor_names": {
-            "age": "আপোনাৰ বয়স",
-            "systolic_bp": "আপোনাৰ উচ্চ ৰক্তচাপ",
-            "diastolic": "আপোনাৰ নিম্ন ৰক্তচাপ",
-            "bs": "আপোনাৰ তেজৰ শৰ্কৰা",
-            "body_temp": "আপোনাৰ শৰীৰৰ উষ্ণতা",
-            "bmi": "আপোনাৰ BMI (বডি মাচ ইণ্ডেক্স)",
-            "previous_complications": "আপোনাৰ পূৰ্বৰ জটিলতাৰ ইতিহাস",
-            "preexisting_diabetes": "আপোনাৰ পূৰ্বৰ ডায়েবেটিচৰ ইতিহাস",
-            "gestational_diabetes": "আপোনাৰ গৰ্ভকালীন ডায়েবেটিচৰ স্থিতি",
-            "mental_health": "আপোনাৰ মানসিক স্বাস্থ্যৰ স্থিতি",
-            "heart_rate": "আপোনাৰ হৃদস্পন্দন"
+            "age": "বয়স",
+            "systolic_bp": "উচ্চ ৰক্তচাপ",
+            "diastolic": "নিম্ন ৰক্তচাপ",
+            "bs": "তেজৰ শৰ্কৰা",
+            "body_temp": "শৰীৰৰ উষ্ণতা",
+            "bmi": "BMI (বডি মাচ ইণ্ডেক্স)",
+            "previous_complications": "পূৰ্বৰ জটিলতা",
+            "preexisting_diabetes": "পূৰ্বৰ ডায়েবেটিচ",
+            "gestational_diabetes": "গৰ্ভকালীন ডায়েবেটিচ",
+            "mental_health": "মানসিক স্বাস্থ্য",
+            "heart_rate": "হৃদস্পন্দন"
         },
         "data_header": "আপুনি দিয়া তথ্য:"
     }
@@ -234,20 +234,18 @@ if submit_button:
         # 7. Sort the factors
         risk_factors.sort(key=lambda x: x[1], reverse=True)
         
-        # 8. Display the list
+        # --- 8. DISPLAY THE NEW, SIMPLE LIST ---
         if risk_factors:
             st.write(lang["xai_explainer"])
             
             # Get the dictionary of friendly names
             factor_name_map = lang.get("factor_names", {})
-            # Get the sentence end
-            sentence_end = lang.get("xai_is_factor", "is a factor contributing to risk.")
             
-            # Loop and print friendly sentences
+            # Loop and print just the factor name
             for factor_name, factor_value in risk_factors:
                 # Find the translated, "friendly" name
                 friendly_name = factor_name_map.get(factor_name, factor_name.replace('_', ' ').title())
-                st.markdown(f"- **{friendly_name}** {sentence_end}")
+                st.markdown(f"- **{friendly_name}**")
         else:
             st.write(lang["xai_none"])
 
