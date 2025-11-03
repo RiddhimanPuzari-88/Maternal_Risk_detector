@@ -21,7 +21,7 @@ LANGUAGES = {
         "weight": "4. Weight (in kg)",
         "col_vitals": "Vitals",
         "systolic_bp": "5. Upper Blood Pressure",
-        "di_astolic_bp": "6. Lower Blood Pressure",
+        "diastolic_bp": "6. Lower Blood Pressure",
         "bs": "7. Blood Sugar",
         "bs_help": "A number like 7.2 or 11.0",
         "body_temp": "8. Body Temperature (C)",
@@ -56,7 +56,7 @@ LANGUAGES = {
         "weight": "৪. ওজন (kg)",
         "col_vitals": "ভিটেলছ (Vitals)",
         "systolic_bp": "৫. উচ্চ ৰক্তচাপ (Systolic)",
-        "di_astolic_bp": "৬. নিম্ন ৰক্তচাপ (Diastolic)",
+        "diastolic_bp": "৬. নিম্ন ৰক্তচাপ (Diastolic)",
         "bs": "৭. তেজৰ শৰ্কৰা",
         "bs_help": "এটা সংখ্যা যেনে ৭.২ বা ১১.০",
         "body_temp": "৮. শৰীৰৰ উষ্ণতা (C)",
@@ -83,13 +83,22 @@ LANGUAGES = {
     }
 }
 
-# --- 2. Load Pre-Trained Model ---
+# --- 2. Load Model, Features, and Explainer (FIXED) ---
+# This one function does everything and is cached.
 @st.cache_resource
-def load_model_and_names():
+def load_all():
     try:
+        # 1. Load Model
         model = joblib.load('model.joblib')
+        
+        # 2. Load Feature Names
         feature_names = joblib.load('feature_names.joblib')
-        return model, feature_names
+        
+        # 3. Create Explainer
+        explainer = shap.TreeExplainer(model)
+        
+        return model, feature_names, explainer
+    
     except FileNotFoundError:
         st.error("Model files not found. Please upload 'model.joblib' and 'feature_names.joblib' to your GitHub repo.")
         st.stop()
@@ -97,18 +106,10 @@ def load_model_and_names():
         st.error(f"An error occurred loading model files: {e}")
         st.stop()
 
-# --- 3. Load Model and SHAP Explainer ---
-model, feature_names = load_model_and_names()
+# Load all three objects from our single cached function
+model, feature_names, explainer = load_all()
 
-@st.cache_resource
-def get_shap_explainer(model):
-    # Create the SHAP explainer
-    return shap.TreeExplainer(model)
-
-explainer = get_shap_explainer(model)
-
-
-# --- 4. Set Language ---
+# --- 3. Set Language ---
 if 'lang' not in st.session_state:
     st.session_state.lang = "English"
 
@@ -117,11 +118,11 @@ st.session_state.lang = lang_choice
 lang = LANGUAGES[st.session_state.lang] 
 
 
-# --- 5. Streamlit App Interface ---
+# --- 4. Streamlit App Interface ---
 st.set_page_config(page_title="Maternal Risk Assessor", layout="wide")
 st.title(lang["title"])
 
-# --- 6. Input Form ---
+# --- 5. Input Form ---
 patient_input = {}
 
 with st.form(key='patient_form'):
@@ -140,7 +141,7 @@ with st.form(key='patient_form'):
     with col2:
         st.header(lang["col_vitals"])
         patient_input['systolic_bp'] = st.slider(lang["systolic_bp"], 80, 180, 120)
-        patient_input['diastolic'] = st.slider(lang["di_astolic_bp"], 50, 120, 80)
+        patient_input['diastolic'] = st.slider(lang["diastolic_bp"], 50, 120, 80)
         patient_input['bs'] = st.number_input(lang["bs"], min_value=5.0, max_value=20.0, value=7.2, step=0.1, help=lang["bs_help"])
         temp_c = st.slider(lang["body_temp"], min_value=35.0, max_value=41.0, value=37.0, step=0.1, help=lang["body_temp_help"])
         patient_input['heart_rate'] = st.slider(lang["heart_rate"], 60, 100, 75)
@@ -156,7 +157,7 @@ with st.form(key='patient_form'):
     submit_button = st.form_submit_button(label=lang["submit_button"], use_container_width=True)
     st.write("")
 
-# --- 7. Prediction Logic & XAI ---
+# --- 6. Prediction Logic & XAI ---
 if submit_button:
     # --- CONVERSIONS ---
     total_inches = (height_ft * 12) + height_in
@@ -188,10 +189,7 @@ if submit_button:
     st.write(lang["xai_explainer"])
     
     try:
-        # --- THIS IS THE FINAL, MODERN, CORRECT FIX ---
-        
-        # 1. Use the explainer (which we cached) on the patient's data
-        #    This returns a shap.Explanation object.
+        # 1. Use the explainer (which we already loaded)
         shap_explanation = explainer(patient_df)
 
         # 2. We want the explanation for CLASS 1 (High-Risk)
@@ -201,10 +199,7 @@ if submit_button:
         #    [1] -> for class 1 (High-Risk)
         explanation_for_class_1 = shap_explanation[0, :, 1]
         
-        # --- END OF FIX ---
-
         # 3. Create the force plot
-        #    This modern object bundles the base value and shap values
         fig, ax = plt.subplots(figsize=(10, 3))
         shap.plots.force(
             explanation_for_class_1,
