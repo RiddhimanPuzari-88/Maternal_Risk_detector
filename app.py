@@ -6,10 +6,9 @@ import shap  # For XAI
 import matplotlib.pyplot as plt
 import warnings
 
-# Suppress warnings
 warnings.filterwarnings('ignore')
 
-# --- 1. Language Translation Dictionary (UPDATED) ---
+#     Priya : Handled all translations for English and Assamese.
 LANGUAGES = {
     "English": {
         "title": "Pregnency Health Risk Assessment",
@@ -46,7 +45,6 @@ LANGUAGES = {
         "breakdown_header": "--- Main Risk Factors ---",
         "xai_explainer": "The model suggests these factors are contributing to a higher risk:",
         "xai_none": "The model did not find any significant factors contributing to high risk.",
-        # "xai_is_factor": "is a factor...",  # REMOVED
         "factor_names": {
             "age": "Age",
             "systolic_bp": "Upper Blood Pressure",
@@ -97,7 +95,6 @@ LANGUAGES = {
         "breakdown_header": "--- মূল আশংকাৰ কাৰকসমূহ ---",
         "xai_explainer": "মডেলটোৱে এই কাৰকসমূহক উচ্চ আশংকাৰ বাবে দায়ী বুলি চিনাক্ত কৰিছে:",
         "xai_none": "মডেলটোৱে কোনো গুৰুত্বপূৰ্ণ আশংকাৰ কাৰক বিচাৰি পোৱা নাই।",
-        # "xai_is_factor": "...", # REMOVED
         "factor_names": {
             "age": "বয়স",
             "systolic_bp": "উচ্চ ৰক্তচাপ",
@@ -115,14 +112,23 @@ LANGUAGES = {
     }
 }
 
-# --- 2. Load Model, Features, and Explainer ---
+#  Load Model, Features, and Explainer
+# Abhishek: Set up the main loading function for the model and explainer.
+
 @st.cache_resource
 def load_all():
     try:
+        # Load the model we trained in Colab
         model = joblib.load('model.joblib')
+        
+        # Load the feature names to keep everything in order
         feature_names = joblib.load('feature_names.joblib')
+        
+        # Create the SHAP explainer from the model
         explainer = shap.TreeExplainer(model)
+        
         return model, feature_names, explainer
+    
     except FileNotFoundError:
         st.error("Model files not found. Please upload 'model.joblib' and 'feature_names.joblib' to your GitHub repo.")
         st.stop()
@@ -130,9 +136,11 @@ def load_all():
         st.error(f"An error occurred loading model files: {e}")
         st.stop()
 
+# Load all three objects
 model, feature_names, explainer = load_all()
 
 # --- 3. Set Language ---
+# Nidhi: Added the language selector in the sidebar.
 if 'lang' not in st.session_state:
     st.session_state.lang = "English"
 
@@ -141,17 +149,21 @@ st.session_state.lang = lang_choice
 lang = LANGUAGES[st.session_state.lang] 
 
 
-# --- 4. Streamlit App Interface ---
+#  Streamlit App Interface
+# Priya: Set up the main page configuration and title.
 st.set_page_config(page_title="Maternal Risk Assessor", layout="wide")
 st.title(lang["title"])
 
 # --- 5. Input Form ---
+# Priya: Designed the 3-column layout for the form.
 patient_input = {}
 
 with st.form(key='patient_form'):
     st.subheader(lang["form_header"])
     col1, col2, col3 = st.columns(3)
     
+    # --- Column 1: Patient Profile ---
+    # Nidhi: Added profile inputs (Age, Height, Weight).
     with col1:
         st.header(lang["col_profile"])
         patient_input['age'] = st.slider(lang["age"], 15, 60, 30)
@@ -161,6 +173,8 @@ with st.form(key='patient_form'):
         height_in = st.number_input("Inches", min_value=0, max_value=11, value=3, step=1, label_visibility="collapsed")
         weight_kg = st.number_input(lang["weight"], min_value=30.0, max_value=200.0, value=65.0, step=0.1)
 
+    # --- Column 2: Vitals ---
+    # Nidhi: Added Vitals inputs.
     with col2:
         st.header(lang["col_vitals"])
         patient_input['systolic_bp'] = st.slider(lang["systolic_bp"], 80, 180, 120)
@@ -169,6 +183,8 @@ with st.form(key='patient_form'):
         temp_c = st.slider(lang["body_temp"], min_value=35.0, max_value=41.0, value=37.0, step=0.1, help=lang["body_temp_help"])
         patient_input['heart_rate'] = st.slider(lang["heart_rate"], 60, 100, 75)
 
+    # --- Column 3: Medical History ---
+    # Nidhi: Added History inputs (selectboxes).
     with col3:
         st.header(lang["col_history"])
         patient_input['previous_complications'] = st.selectbox(lang["prev_comp"], (0, 1), format_func=lambda x: lang["yes"] if x == 1 else lang["no"], help=lang["prev_comp_help"])
@@ -181,7 +197,13 @@ with st.form(key='patient_form'):
     st.write("")
 
 # --- 6. Prediction Logic & XAI ---
+# This section runs when the user clicks "Check Risk".
 if submit_button:
+    
+    # Abhishek: Implemented the conversion logic.
+    # The model needs BMI, not height/weight.
+    # The model needs Fahrenheit, not Celsius.
+    
     # --- CONVERSIONS ---
     total_inches = (height_ft * 12) + height_in
     height_cm = total_inches * 2.54
@@ -189,16 +211,16 @@ if submit_button:
     patient_input['bmi'] = weight_kg / (height_m ** 2)
     patient_input['body_temp'] = (temp_c * 9/5) + 32
     
-    # 1. Convert to DataFrame
+    # Abhishek: Created the final DataFrame for the model.
     patient_df = pd.DataFrame([patient_input], columns=feature_names)
 
-    # 2. Make predictions
+    # Abhishek: Handled the prediction and probability logic.
     prediction = model.predict(patient_df)
     probability = model.predict_proba(patient_df)
     pred_label_key = "result_high" if prediction[0] == 1 else "result_low"
     pred_prob = probability[0][prediction[0]] * 100
 
-    # 3. Display Results
+    # Nidhi: Added the user-friendly result and advice messages.
     st.subheader(lang["result_header"])
     if pred_label_key == "result_high":
         st.error(f"**{lang[pred_label_key]}** ({lang['confidence']}: {pred_prob:.2f}%)")
@@ -208,10 +230,12 @@ if submit_button:
         st.info(lang["advice_low"])
     
     # --- 4. SHAP EXPLAINABLE AI (LIST) ---
+    # Riddhiman: Implemented the SHAP logic.
+    # This is the "Explainable AI" part.
     st.subheader(lang["breakdown_header"])
     
     try:
-        # 1. Use the explainer
+        # 1. Use the explainer on the patient's data
         shap_explanation = explainer(patient_df)
 
         # 2. Get explanation for CLASS 1 (High-Risk)
@@ -227,6 +251,7 @@ if submit_button:
         feature_shap_list = list(zip(feature_names_for_plot, shap_values_for_class_1))
         
         # 6. Find all features that are "abnormal" (pushing risk UP)
+        # Riddhiman: Added a threshold (0.01) to only show important factors.
         risk_factors = [
             (name, val) for name, val in feature_shap_list if val > 0.01
         ]
@@ -234,16 +259,16 @@ if submit_button:
         # 7. Sort the factors
         risk_factors.sort(key=lambda x: x[1], reverse=True)
         
-        # --- 8. DISPLAY THE NEW, SIMPLE LIST ---
+        # 8. Display the new, simple list
+        # Riddhiman: Changed this from a graph to a simple list.
         if risk_factors:
             st.write(lang["xai_explainer"])
             
-            # Get the dictionary of friendly names
+            # Nidhi: Provided the dictionary of friendly names
             factor_name_map = lang.get("factor_names", {})
             
             # Loop and print just the factor name
             for factor_name, factor_value in risk_factors:
-                # Find the translated, "friendly" name
                 friendly_name = factor_name_map.get(factor_name, factor_name.replace('_', ' ').title())
                 st.markdown(f"- **{friendly_name}**")
         else:
@@ -253,7 +278,7 @@ if submit_button:
         st.error(f"Could not generate risk factor list: {e}")
 
     
-    # 5. Display input data
+    # Abhishek: Added this section to show the user what data they entered.
     st.subheader(lang["data_header"])
     display_df = patient_df.copy()
     display_df['bmi'] = round(display_df['bmi'], 2)
