@@ -47,7 +47,7 @@ LANGUAGES = {
         "data_header": "The Data You Entered:"
     },
     "Assamese": {
-        "title": "গৰ্ভাৱস্থাৰ স্বাস্থ্য আশংকা পৰীক্ষক",
+        "title": "ଗৰ্ভাৱস্থাৰ স্বাস্থ্য আশংকা পৰীক্ষক",
         "form_header": "আপোনাৰ তথ্য দিয়ক",
         "col_profile": "প্ৰফাইল",
         "age": "১. বয়স",
@@ -182,32 +182,32 @@ if submit_button:
         # Create the SHAP explainer
         explainer = shap.TreeExplainer(model)
         
-        # --- THIS IS THE FINAL FIX ---
-        # We use the modern explainer(dataframe) API.
-        # This returns a shap.Explanation object.
-        shap_explanation = explainer(patient_df)
-
-        # We want the explanation for CLASS 1 (High-Risk)
-        # shap_explanation[0, :, 1] gets:
-        # [0] - the first patient (our only patient)
-        # :   - all features
-        # [1] - for class 1
+        # --- THIS IS THE FINAL ROBUST FIX ---
+        # Get SHAP values. For a scikit-learn RF, this returns a list of 2 arrays:
+        # [shap_values_for_class_0, shap_values_for_class_1]
+        shap_values_list = explainer.shap_values(patient_df)
         
-        # Get the SHAP values for class 1
-        shap_values_for_class_1 = shap_explanation[0, :, 1].values
+        # Get the base values. This also returns a list of 2 base values:
+        # [base_value_for_class_0, base_value_for_class_1]
+        base_values_list = explainer.expected_value
         
-        # Get the base value for class 1
-        # This is the average prediction for "High-Risk"
-        base_value_for_class_1 = shap_explanation[0, :, 1].base_values
-        
-        # --- END OF FINAL FIX ---
+        # Check if the output is a list (for binary classification)
+        if isinstance(shap_values_list, list) and len(shap_values_list) == 2:
+            # We want the explanation for CLASS 1 (High-Risk)
+            shap_values_for_plot = shap_values_list[1][0] # class 1, first patient
+            base_value_for_plot = base_values_list[1] # base value for class 1
+        else:
+            # Fallback for unexpected format (e.g., single-output)
+            shap_values_for_plot = shap_values_list[0] # first patient
+            base_value_for_plot = base_values_list # base value is a single float
+        # --- END OF FIX ---
 
         # Create the force plot
         fig, ax = plt.subplots(figsize=(10, 3))
         shap.force_plot(
-            base_value_for_class_1,      # The base value for High-Risk
-            shap_values_for_class_1,     # The SHAP values for this patient
-            patient_df,                  # The patient's data
+            base_value_for_plot,
+            shap_values_for_plot,
+            patient_df,
             matplotlib=True,
             show=False,
             text_rotation=0
