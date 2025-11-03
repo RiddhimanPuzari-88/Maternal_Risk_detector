@@ -43,7 +43,7 @@ LANGUAGES = {
         "advice_high": "What to do: Please see a doctor soon for extra check-ups.",
         "advice_low": "What to do: Continue with your normal check-ups.",
         "breakdown_header": "--- Why the model decided this (SHAP Plot) ---",
-        "xai_explainer": "Red arrows push risk HIGHER. Blue arrows push risk LOWER.",
+        "xai_explainer": "Red arrows push risk HIGHER (towards High-Risk). Blue arrows push risk LOWER.",
         "data_header": "The Data You Entered:"
     },
     "Assamese": {
@@ -78,7 +78,7 @@ LANGUAGES = {
         "advice_high": "কি কৰিব: অনুগ্ৰহ কৰি সোনকালে অতিৰিক্ত পৰীক্ষাৰ বাবে এজন চিকিৎসকক দেখুৱাওক।",
         "advice_low": "কি কৰিব: আপোনাৰ সাধাৰণ পৰীক্ষা অব্যাহত ৰাখক।",
         "breakdown_header": "--- মডেলটোৱে কিয় এই সিদ্ধান্ত ল'লে (SHAP Plot) ---",
-        "xai_explainer": "ৰঙা কাড়বোৰে আশংকাক ওপৰলৈ ঠেলে। নীলা কাড়বোৰে আশংকাক তললৈ ঠেলে।",
+        "xai_explainer": "ৰঙা কাড়বোৰে আশংকাক ওপৰলৈ (High-Risk) ঠেলে। নীলা কাড়বোৰে আশংকাক তললৈ ঠেলে।",
         "data_header": "আপুনি দিয়া তথ্য:"
     }
 }
@@ -182,26 +182,31 @@ if submit_button:
         # Create the SHAP explainer
         explainer = shap.TreeExplainer(model)
         
-        # --- THIS IS THE FIX ---
-        # For a binary classifier, TreeExplainer returns a LIST of two arrays:
-        # [shap_values_for_class_0, shap_values_for_class_1]
+        # --- THIS IS THE FINAL FIX ---
+        # We use the modern explainer(dataframe) API.
+        # This returns a shap.Explanation object.
+        shap_explanation = explainer(patient_df)
+
+        # We want the explanation for CLASS 1 (High-Risk)
+        # shap_explanation[0, :, 1] gets:
+        # [0] - the first patient (our only patient)
+        # :   - all features
+        # [1] - for class 1
         
-        # 1. Get the list of SHAP values
-        shap_values_list = explainer.shap_values(patient_df)
+        # Get the SHAP values for class 1
+        shap_values_for_class_1 = shap_explanation[0, :, 1].values
         
-        # 2. Get the values for our single patient for CLASS 1 (High-Risk)
-        shap_values_this_patient = shap_values_list[1][0] # [1] for class 1, [0] for the first patient
+        # Get the base value for class 1
+        # This is the average prediction for "High-Risk"
+        base_value_for_class_1 = shap_explanation[0, :, 1].base_values
         
-        # 3. Get the model's base value for CLASS 1 (High-Risk)
-        expected_value = explainer.expected_value[1]
-        
-        # --- END OF FIX ---
+        # --- END OF FINAL FIX ---
 
         # Create the force plot
         fig, ax = plt.subplots(figsize=(10, 3))
         shap.force_plot(
-            expected_value,              # The base value for High-Risk
-            shap_values_this_patient,    # The SHAP values for this patient
+            base_value_for_class_1,      # The base value for High-Risk
+            shap_values_for_class_1,     # The SHAP values for this patient
             patient_df,                  # The patient's data
             matplotlib=True,
             show=False,
