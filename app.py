@@ -21,7 +21,7 @@ LANGUAGES = {
         "weight": "4. Weight (in kg)",
         "col_vitals": "Vitals",
         "systolic_bp": "5. Upper Blood Pressure",
-        "diastolic_bp": "6. Lower Blood Pressure",
+        "di_astolic_bp": "6. Lower Blood Pressure",
         "bs": "7. Blood Sugar",
         "bs_help": "A number like 7.2 or 11.0",
         "body_temp": "8. Body Temperature (C)",
@@ -47,7 +47,7 @@ LANGUAGES = {
         "data_header": "The Data You Entered:"
     },
     "Assamese": {
-        "title": "ଗৰ্ভাৱস্থাৰ স্বাস্থ্য আশংকা পৰীক্ষক",
+        "title": "গৰ্ভাৱস্থাৰ স্বাস্থ্য আশংকা পৰীক্ষক",
         "form_header": "আপোনাৰ তথ্য দিয়ক",
         "col_profile": "প্ৰফাইল",
         "age": "১. বয়স",
@@ -56,7 +56,7 @@ LANGUAGES = {
         "weight": "৪. ওজন (kg)",
         "col_vitals": "ভিটেলছ (Vitals)",
         "systolic_bp": "৫. উচ্চ ৰক্তচাপ (Systolic)",
-        "diastolic_bp": "৬. নিম্ন ৰক্তচাপ (Diastolic)",
+        "di_astolic_bp": "৬. নিম্ন ৰক্তচাপ (Diastolic)",
         "bs": "৭. তেজৰ শৰ্কৰা",
         "bs_help": "এটা সংখ্যা যেনে ৭.২ বা ১১.০",
         "body_temp": "৮. শৰীৰৰ উষ্ণতা (C)",
@@ -97,9 +97,18 @@ def load_model_and_names():
         st.error(f"An error occurred loading model files: {e}")
         st.stop()
 
+# --- 3. Load Model and SHAP Explainer ---
 model, feature_names = load_model_and_names()
 
-# --- 3. Set Language ---
+@st.cache_resource
+def get_shap_explainer(model):
+    # Create the SHAP explainer
+    return shap.TreeExplainer(model)
+
+explainer = get_shap_explainer(model)
+
+
+# --- 4. Set Language ---
 if 'lang' not in st.session_state:
     st.session_state.lang = "English"
 
@@ -108,11 +117,11 @@ st.session_state.lang = lang_choice
 lang = LANGUAGES[st.session_state.lang] 
 
 
-# --- 4. Streamlit App Interface ---
+# --- 5. Streamlit App Interface ---
 st.set_page_config(page_title="Maternal Risk Assessor", layout="wide")
 st.title(lang["title"])
 
-# --- 5. Input Form ---
+# --- 6. Input Form ---
 patient_input = {}
 
 with st.form(key='patient_form'):
@@ -131,7 +140,7 @@ with st.form(key='patient_form'):
     with col2:
         st.header(lang["col_vitals"])
         patient_input['systolic_bp'] = st.slider(lang["systolic_bp"], 80, 180, 120)
-        patient_input['diastolic'] = st.slider(lang["diastolic_bp"], 50, 120, 80)
+        patient_input['diastolic'] = st.slider(lang["di_astolic_bp"], 50, 120, 80)
         patient_input['bs'] = st.number_input(lang["bs"], min_value=5.0, max_value=20.0, value=7.2, step=0.1, help=lang["bs_help"])
         temp_c = st.slider(lang["body_temp"], min_value=35.0, max_value=41.0, value=37.0, step=0.1, help=lang["body_temp_help"])
         patient_input['heart_rate'] = st.slider(lang["heart_rate"], 60, 100, 75)
@@ -147,7 +156,7 @@ with st.form(key='patient_form'):
     submit_button = st.form_submit_button(label=lang["submit_button"], use_container_width=True)
     st.write("")
 
-# --- 6. Prediction Logic & XAI ---
+# --- 7. Prediction Logic & XAI ---
 if submit_button:
     # --- CONVERSIONS ---
     total_inches = (height_ft * 12) + height_in
@@ -179,35 +188,26 @@ if submit_button:
     st.write(lang["xai_explainer"])
     
     try:
-        # Create the SHAP explainer
-        explainer = shap.TreeExplainer(model)
+        # --- THIS IS THE FINAL, MODERN, CORRECT FIX ---
         
-        # --- THIS IS THE FINAL ROBUST FIX ---
-        # Get SHAP values. For a scikit-learn RF, this returns a list of 2 arrays:
-        # [shap_values_for_class_0, shap_values_for_class_1]
-        shap_values_list = explainer.shap_values(patient_df)
+        # 1. Use the explainer (which we cached) on the patient's data
+        #    This returns a shap.Explanation object.
+        shap_explanation = explainer(patient_df)
+
+        # 2. We want the explanation for CLASS 1 (High-Risk)
+        #    shap_explanation[0, :, 1] gets:
+        #    [0] -> the first patient (our only patient)
+        #    :   -> all features
+        #    [1] -> for class 1 (High-Risk)
+        explanation_for_class_1 = shap_explanation[0, :, 1]
         
-        # Get the base values. This also returns a list of 2 base values:
-        # [base_value_for_class_0, base_value_for_class_1]
-        base_values_list = explainer.expected_value
-        
-        # Check if the output is a list (for binary classification)
-        if isinstance(shap_values_list, list) and len(shap_values_list) == 2:
-            # We want the explanation for CLASS 1 (High-Risk)
-            shap_values_for_plot = shap_values_list[1][0] # class 1, first patient
-            base_value_for_plot = base_values_list[1] # base value for class 1
-        else:
-            # Fallback for unexpected format (e.g., single-output)
-            shap_values_for_plot = shap_values_list[0] # first patient
-            base_value_for_plot = base_values_list # base value is a single float
         # --- END OF FIX ---
 
-        # Create the force plot
+        # 3. Create the force plot
+        #    This modern object bundles the base value and shap values
         fig, ax = plt.subplots(figsize=(10, 3))
-        shap.force_plot(
-            base_value_for_plot,
-            shap_values_for_plot,
-            patient_df,
+        shap.plots.force(
+            explanation_for_class_1,
             matplotlib=True,
             show=False,
             text_rotation=0
