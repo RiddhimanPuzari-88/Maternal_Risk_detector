@@ -83,8 +83,7 @@ LANGUAGES = {
     }
 }
 
-# --- 2. Load Pre-Trained Model (This replaces your old function) ---
-# This function loads the files you created in Step 1
+# --- 2. Load Pre-Trained Model ---
 @st.cache_resource
 def load_model_and_names():
     try:
@@ -101,9 +100,12 @@ def load_model_and_names():
 model, feature_names = load_model_and_names()
 
 # --- 3. Set Language ---
-# We still need the sidebar for the language switch
+if 'lang' not in st.session_state:
+    st.session_state.lang = "English"
+
 lang_choice = st.sidebar.selectbox("Language / ভাষা", ["English", "Assamese"])
-lang = LANGUAGES[lang_choice] # Get text for *this* page
+st.session_state.lang = lang_choice 
+lang = LANGUAGES[st.session_state.lang] 
 
 
 # --- 4. Streamlit App Interface ---
@@ -176,18 +178,31 @@ if submit_button:
     st.subheader(lang["breakdown_header"])
     st.write(lang["xai_explainer"])
     
-    # Create the SHAP explainer
     try:
+        # Create the SHAP explainer
         explainer = shap.TreeExplainer(model)
         
-        # Get SHAP values for the single patient.
-        shap_values = explainer.shap_values(patient_df)[1][0]
+        # --- THIS IS THE FIX ---
+        # For a binary classifier, TreeExplainer returns one array of shap_values
+        # (for class 1) with shape (n_samples, n_features)
         
+        # 1. Get SHAP values for ALL samples (in this case, just one)
+        shap_values_array = explainer.shap_values(patient_df) # Shape (1, 11)
+        
+        # 2. Get the values for our single patient (the first row)
+        shap_values_this_patient = shap_values_array[0] # Shape (11,)
+        
+        # 3. Get the model's base value (this is a single float)
+        #    This is the average "High-Risk" probability over the whole dataset
+        expected_value = explainer.expected_value
+        
+        # --- END OF FIX ---
+
         # Create the force plot
         fig, ax = plt.subplots(figsize=(10, 3))
         shap.force_plot(
-            explainer.expected_value[1],  # The model's average "High-Risk" score
-            shap_values,                 # The SHAP values for this patient
+            expected_value,              # The base value
+            shap_values_this_patient,    # The SHAP values for this patient
             patient_df,                  # The patient's data
             matplotlib=True,
             show=False,
