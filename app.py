@@ -83,22 +83,14 @@ LANGUAGES = {
     }
 }
 
-# --- 2. Load Model, Features, and Explainer (FIXED) ---
-# This one function does everything and is cached.
+# --- 2. Load Model, Features, and Explainer ---
 @st.cache_resource
 def load_all():
     try:
-        # 1. Load Model
         model = joblib.load('model.joblib')
-        
-        # 2. Load Feature Names
         feature_names = joblib.load('feature_names.joblib')
-        
-        # 3. Create Explainer
         explainer = shap.TreeExplainer(model)
-        
         return model, feature_names, explainer
-    
     except FileNotFoundError:
         st.error("Model files not found. Please upload 'model.joblib' and 'feature_names.joblib' to your GitHub repo.")
         st.stop()
@@ -106,7 +98,6 @@ def load_all():
         st.error(f"An error occurred loading model files: {e}")
         st.stop()
 
-# Load all three objects from our single cached function
 model, feature_names, explainer = load_all()
 
 # --- 3. Set Language ---
@@ -193,10 +184,6 @@ if submit_button:
         shap_explanation = explainer(patient_df)
 
         # 2. We want the explanation for CLASS 1 (High-Risk)
-        #    shap_explanation[0, :, 1] gets:
-        #    [0] -> the first patient (our only patient)
-        #    :   -> all features
-        #    [1] -> for class 1 (High-Risk)
         explanation_for_class_1 = shap_explanation[0, :, 1]
         
         # 3. Create the force plot
@@ -209,7 +196,9 @@ if submit_button:
         )
         plt.tight_layout()
         st.pyplot(fig, use_container_width=True)
-        st.set_option('deprecation.showPyplotGlobalUse', False)
+        
+        # --- THIS LINE WAS REMOVED ---
+        # st.set_option('deprecation.showPyplotGlobalUse', False) 
     
     except Exception as e:
         st.error(f"Could not generate SHAP plot: {e}")
